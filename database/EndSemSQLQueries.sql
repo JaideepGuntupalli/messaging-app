@@ -1,5 +1,57 @@
 USE `Messaging-App`;
 
+
+
+
+
+
+
+
+-- VIEWS
+-- The view of all the group chatboxes, their ids, their names and the last text message of that user
+create view grp_chatboxes as
+SELECT distinct Chatbox.id, Chatbox.group_id, `Group`.name, 
+Message.msg_text from Chatbox, Chatbox_msg, `Group`, Message where 
+Chatbox_msg.chatbox_id = chatbox.id and Chatbox_msg.user_id = 1 and `Group`.id = 
+Chatbox.group_id and Chatbox.last_message_id=Message.id;
+select * from grp_chatboxes;
+
+-- Perosnal profile page of the user
+create view personal_info as
+SELECT firstname, lastname, profilepic, bio, emailid, theme, wallpaper
+FROM user where `user`.id = 1;
+select * from personal_info;
+
+-- View of the one2one messages, the name of the person and the last text msg.
+create view one2one as
+SELECT distinct Chatbox.id, `User`.firstname, One_to_One.user_id, Message.msg_text 
+from Chatbox, Chatbox_msg, `User`, One_to_One, Message where Chatbox_msg.chatbox_id = chatbox.id and 
+Chatbox_msg.user_id = 1 and chatbox.group_id is null and chatbox.id = One_to_One.chatbox_id and 
+`User`.id = One_to_One.user_id and One_to_One.user_id != 1 and Chatbox.last_message_id=Message.id;
+select * from one2one;
+
+
+
+
+
+
+
+-- GRANTS
+-- Enable privileges to be granted to or removed from other accounts. Levels: Global, database, table, routine, proxy.
+-- creating a user
+create user 'dev'@'localhost' identified by 'dev';
+
+-- First grant gives database level access on viewing and quering.
+grant select on *.* to 'dev'@'localhost';
+-- Second grant gives table level access to Insert new users.
+grant insert on `User` to 'dev'@'localhost';
+
+
+
+
+
+
+
 -- Indexing
 CREATE INDEX Message_idx_created_at
   ON Message(created_at);
@@ -20,18 +72,25 @@ ALTER TABLE `one_to_one` ADD INDEX `one_to_one_idx_chatbox_id_user_id` (`chatbox
 ALTER TABLE `message` ADD INDEX `message_idx_id_created_at` (`id`,`created_at`);
 ALTER TABLE `starred_msgs` ADD INDEX `starred_msgs_idx_msg_id` (`msg_id`);
 
+
+
+
+
+
+
+
+
+-- QUERIES & TRIGGERS
+
 -- Retrieve the msgs from group
 SELECT Message.* FROM Message, Chatbox_msg
 WHERE Chatbox_msg.chatbox_id = 1 AND Chatbox_msg.msg_id= Message.id ORDER BY Message.created_at;
 
--- Retrieve the chatbox name(username/groupname) from the chatboxid along with the last message and wheter it is a group
-
-create table t1 as select distinct firstname from `user` as us, chatbox_msg as cm
-where us.id = cm.user_id and cm.chatbox_id = 1 and us.id != 1;
-create table t2 as select distinct message.msg_text from chatbox, message where chatbox.id = 1 and message.id = chatbox.last_message_id;
-create table t3 as select distinct gp.`name` from `group` as gp, chatbox as cb
-where cb.group_id = gp.id and cb.id = 1;
-select * from t1, t2, t3;
+-- Retrieve all the groups associated with a user with their names and last text msgs.
+SELECT distinct Chatbox.id, Chatbox.group_id, `Group`.name, 
+Message.msg_text from Chatbox, Chatbox_msg, `Group`, Message where 
+Chatbox_msg.chatbox_id = chatbox.id and Chatbox_msg.user_id = 1 and `Group`.id = 
+Chatbox.group_id and Chatbox.last_message_id=Message.id;
 
 -- Retrieve all the starred msgs
 SELECT m.msg_text 
@@ -39,7 +98,7 @@ SELECT m.msg_text
         starred_msgs AS sm,
         message m 
     WHERE
-        sm.msg_id = m.id 
+        sm.msg_id = m.id and m.user_id = 1
     ORDER BY
         m.created_at DESC;
 
@@ -95,16 +154,16 @@ insert into `chatbox_msg` values (1, 1, 1999);
 
 insert into message values (1999, 1, '2021-05-13 05:00:50', null, 'abcd', null);
 
--- Search among multimedia(Optimised)
+-- Search among multimedia
 SELECT message.* FROM message, `User` 
 WHERE `User`.id = 1 AND `User`.id = Message.user_id and media_url like "%a%";
 
--- Sorting Files/Images(Optimised)
+-- Sorting Files/Images
 SELECT cm.chatbox_id, cm.msg_id, m.user_id, m.created_at, m.file_url from Chatbox_msg as cm, Message as m
 WHERE cm.chatbox_id = 1 AND m.id = cm.msg_id AND file_url is not null 
 ORDER BY m.created_at desc;
 
--- Retrieve the user's last seen(Optimised)
+-- Retrieve the user's last seen
 SELECT
         DISTINCT `user`.id,
         `user`.last_login 
@@ -136,4 +195,5 @@ SELECT
                 AND (
                     `user`.id = one_to_one.user_id
                 )
-            )
+            );
+
