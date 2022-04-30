@@ -27,6 +27,8 @@ let connection = mysql.createConnection({
     database: "Messaging-App",
 });
 
+let msg_id = 1000;
+
 app.post("/register", (res, req) => {
     const fname = req.query.fname;
     const lname = req.query.lname;
@@ -101,9 +103,59 @@ app.get("/viewMsgs", (req, res) => {
     });
 });
 
+app.get("/lastSeen", (req, res) => {
+    const user_id = req.query.user_id;
+
+    const query = `SELECT
+    DISTINCT \`user\`.id,
+    \`user\`.last_login 
+FROM
+    \`user\` 
+WHERE
+    EXISTS (
+        SELECT
+            1 
+        FROM
+            one_to_one 
+        WHERE
+            (
+                one_to_one.user_id != 80 
+                AND EXISTS (
+                    SELECT
+                        1 
+                    FROM
+                        one_to_one AS one_to_one1 
+                    WHERE
+                        (
+                            one_to_one1.user_id = ${user_id}
+                        ) 
+                        AND (
+                            one_to_one.chatbox_id = one_to_one1.chatbox_id
+                        )
+                )
+            ) 
+            AND (
+                \`user\`.id = one_to_one.user_id
+            )
+        )
+        LIMIT 1;`;
+
+    console.log(query);
+
+    connection.query(query, (error, results) => {
+        if (error) {
+            console.log(error);
+            throw error;
+        } else {
+            res.json(results);
+        }
+    });
+});
+
 app.post("/sendMsg", (req, res) => {
     const msg = req.query.msg;
     const user_id = req.query.user_id;
+    const chatbox_id = req.query.chatbox_id;
 
     let today = new Date();
     let date =
@@ -116,13 +168,34 @@ app.post("/sendMsg", (req, res) => {
         today.getHours() + ":" + today.getMinutes() + ":" + today.getSeconds();
     const dateTime = date + " " + time;
 
-    const query = `INSERT INTO Message (id, user_id, created_at, media_url, msg_text, file_url) VALUES (1999, ${user_id}, ${dateTime}, null, ${msg}, NULL);`;
+    const currmsg_id = msg_id++;
 
-    connection.query(query, (error, results) => {
+    const query1 = `UPDATE chatbox SET last_message_id = ${currmsg_id} WHERE id = ${chatbox_id};`;
+
+    const query2 = `insert into \`chatbox_msg\` values (${user_id}, ${chatbox_id}, ${currmsg_id});`;
+
+    const query3 = `INSERT INTO Message (id, user_id, created_at, media_url, msg_text, file_url) VALUES (${currmsg_id}, ${user_id}, ${dateTime}, null, ${msg}, NULL);`;
+
+    connection.query(query1, (error, results) => {
         if (err) {
             console.log(error);
+            res.status(400).send(err);
         } else {
-            res.json({ status: "success" });
+            connection.query(query2, (error, results) => {
+                if (err) {
+                    console.log(error);
+                    res.status(400).send(err);
+                } else {
+                    connection.query(query3, (error, results) => {
+                        if (err) {
+                            console.log(error);
+                            res.status(400).send(err);
+                        } else {
+                            res.json(results);
+                        }
+                    });
+                }
+            });
         }
     });
 });
